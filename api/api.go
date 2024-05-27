@@ -6,7 +6,8 @@ import (
 	"net/http"
     "fmt"
     "encoding/json"
-    "io/ioutil"
+    "github.com/go-sql-driver/mysql"
+    //"io/ioutil"
 )
 
 type album struct {
