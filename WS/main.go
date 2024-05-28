@@ -18,99 +18,66 @@ type Pagina struct {
 	Body  []byte
 }
 
-func controlla(titolo string) int {
-	var tito string
-	row := db.QueryRow("SELECT title FROM pagine WHERE titolo = ?", titolo)
-	errore_scan := row.Scan(&tito)
-	if errore_scan == nil {
-        return 1 // pagina non trovata
-	}
-    return 0 // trovata una pagina
-}
-
 // FUNZIONA
-func aggiungiPagina(pag Pagina) error {
-	errore_controlla := controlla(pag.Title)
-	if errore_controlla == 1 {
-		result, errore_insert := db.Exec("INSERT INTO pagine (titolo, body) VALUES (?, ?)", pag.Title, pag.Body)
-		if errore_insert != nil {
-			return errore_insert
-		}
-		fmt.Println(result)
-	} else if errore_controlla == 0 {
-		result, errore_update := db.Exec("UPDATE pagine SET body = ? WHERE titolo = ?", pag.Body, pag.Title)
-		fmt.Println(result)
-		if errore_update != nil {
-			return errore_update
-		}
+func (pag *Pagina) salva() {
+	var tito string
+	row := db.QueryRow("SELECT titolo FROM pagine WHERE titolo = ?", pag.Title)
+	errore_scan := row.Scan(&tito)
+	if errore_scan != nil {
+		db.Exec("INSERT INTO pagine (titolo, body) VALUES (?, ?)", pag.Title, pag.Body)
+	} else {
+		db.Exec("UPDATE pagine SET body = ? WHERE titolo = ?", pag.Body, pag.Title)
 	}
-	return nil
 }
 
-func (p *Pagina) salva(titolo string) {
-	err := aggiungiPagina(Pagina{
-		Title: titolo,
-		Body:  p.Body,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("query fatta")
-
-}
-
-func loadPage(titolo string) (*Pagina, error) {
+func loadPage(title string) (*Pagina, error) {
 	var pag Pagina
-	row := db.QueryRow("SELECT body FROM pagine WHERE titolo = ?", titolo)
+	row := db.QueryRow("SELECT body FROM pagine WHERE titolo = ?", title)
 	err := row.Scan(&pag.Body)
 	if err != nil {
 		return nil, fmt.Errorf("pagina non trovata : %v", err)
 	}
-	return &Pagina{Title: titolo, Body: pag.Body}, nil
+	return &Pagina{Title: title, Body: pag.Body}, nil
 }
 
-func viewHandler(w http.ResponseWriter, r *http.Request, titolo string) {
-	p, err := loadPage(titolo)
+func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
+	p, err := loadPage(title)
 	if err != nil {
-		http.Redirect(w, r, "/nuovo/"+titolo, http.StatusFound)
+		http.Redirect(w, r, "/nuovo/"+title, http.StatusFound)
 		return
 	}
 	renderTemplate(w, "visualizza", p)
 }
 
-func editHandler(w http.ResponseWriter, r *http.Request, titolo string) {
-	p, err := loadPage(titolo)
+func editHandler(w http.ResponseWriter, r *http.Request, title string) {
+	p, err := loadPage(title)
 	if err != nil {
-		p = &Pagina{Title: titolo}
+		http.Redirect(w, r, "/nuovo/"+title, http.StatusFound)
+		return
 	}
 	renderTemplate(w, "modifica", p)
 }
 
-func newHandler(w http.ResponseWriter, r *http.Request, titolo string) {
-	errore_controlla := controlla(titolo)
-
-		p, err := loadPage(titolo)
-		if err != nil {
-			p = &Pagina{Title: titolo}
-		}
-    if errore_controlla == 1 {
-		renderTemplate(w, "nuova_pagina", p)
-	} else if errore_controlla == 0 {
-	    viewHandler(w,r,titolo)
-    }
+func newHandler(w http.ResponseWriter, r *http.Request, title string) {
+	p, err := loadPage(title)
+	if err == nil {
+		http.Redirect(w, r, "/modifica/"+title, http.StatusFound)
+		return
+	}
+	renderTemplate(w, "nuovo", p)
 }
 
 func saveHandler(w http.ResponseWriter, r *http.Request, title string) {
 	body := r.FormValue("body")
 	p := &Pagina{Title: title, Body: []byte(body)}
-	p.salva(title)
+	p.salva()
 	http.Redirect(w, r, "/visualizza/"+title, http.StatusFound)
 }
 
 var templates = template.Must(template.ParseFiles(
 	"modifica.html",
 	"visualizza.html",
-	"nuova_pagina.html",
+	"nuovo.html",
 ))
 
 func renderTemplate(w http.ResponseWriter, tmpl string, p *Pagina) {
